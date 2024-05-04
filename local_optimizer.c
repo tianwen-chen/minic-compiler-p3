@@ -1,11 +1,12 @@
-#include<stdio.h>
-#include"Core.h"
-#include"local_optimizer.h"
-#include <stdbool.h>
+#include "local_optimizer.h"
 
-LLVMBasicBlockRef common_subexpression_elimination(LLVMBasicBlockRef bb) {
+// helper func
+bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValueRef value2);
+
+void common_subexpression_elimination(LLVMBasicBlockRef bb) {
     // loop over each pair of instructions in the basic block
     LLVMValueRef instruction_1;
+    bool flag = false;
     for (instruction_1 = LLVMGetFirstInstruction(bb); instruction_1 != NULL; instruction_1 = LLVMGetNextInstruction(instruction_1)) {
         LLVMValueRef instruction_2;
         for(instruction_2 = LLVMGetNextInstruction(instruction_1); instruction_2 != NULL; instruction_2 = LLVMGetNextInstruction(instruction_2)) {
@@ -30,36 +31,21 @@ LLVMBasicBlockRef common_subexpression_elimination(LLVMBasicBlockRef bb) {
                     if(same_operands) {
                         // replace all uses of instruction_2 with instruction_1
                         LLVMReplaceAllUsesWith(instruction_2, instruction_1);
+                        // mark flag
+                        flag = true;
                     }
                 }
             }
         }
     }
-    return bb;
-
-}
-
-/*
-    value1 and value2 are load operations from the same address, check if there is store operation to that address between the two
-    if there is, return false, else return true 
-*/
-bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValueRef value2) {
-    // get the address of the load operation
-    LLVMValueRef address = LLVMGetOperand(value1, 0);
-
-    LLVMValueRef next_instruction;
-    for(next_instruction = LLVMGetNextInstruction(value1); next_instruction != value2; next_instruction = LLVMGetNextInstruction(next_instruction)) {
-        if(LLVMGetInstructionOpcode(next_instruction) == LLVMStore) {
-            if(LLVMGetOperand(next_instruction, 1) == address) {
-                return false;
-            }
-        }
+    // check for global flag
+    if(!flag){
+        common_subexpression_elimination_change = false;
     }
-
-    return true;
 }
 
-LLVMBasicBlockRef dead_code_elimination(LLVMBasicBlockRef bb) {
+void dead_code_elimination(LLVMBasicBlockRef bb) {
+    bool change = false;
     // TODO: complete the list in header file (or macro?)
     LLVMOpcode instructions_to_keep[3] = {LLVMStore, LLVMCall, LLVMRet};
     // loop over each instruction in the basic block and check if the oprand is used by any other instruction
@@ -67,7 +53,7 @@ LLVMBasicBlockRef dead_code_elimination(LLVMBasicBlockRef bb) {
     for (instruction = LLVMGetFirstInstruction(bb); instruction != NULL; instruction = LLVMGetNextInstruction(instruction)) {
         // check if the instruction is in the list of instructions to keep
         bool keep = false;
-        // FIXME: number of loops (size of the list), or use a hashset?
+        // TODO: number of loops (size of the list), or use a hashset?
         for(int i = 0; i < 3; i++) {
             if(LLVMGetInstructionOpcode(instruction) == instructions_to_keep[i]) {
                 keep = true;
@@ -79,26 +65,19 @@ LLVMBasicBlockRef dead_code_elimination(LLVMBasicBlockRef bb) {
             if(LLVMGetFirstUse(instruction) == NULL) {
                 // if not, remove the instruction
                 LLVMInstructionEraseFromParent(instruction);
+                change = true;
             }
         }
     }
-    
-    return bb;
-
+    // check for global flag
+    if(!change){
+        dead_code_elimination_change = false;
+    }
 }
 
 
-/*Your constant folding optimization function will go over all the instructions in the given function and 
-find instructions where opcode corresponds to arithmetic operations (+, -, *) and all operands are constants. 
-For such instructions, your optimization function should replace all uses of the instruction to point to a constant instruction.
-
-Some useful LLVM functions for this optimization are:
-
-LLVMConstAdd
-LLVMConstSub
-LLVMConstMul
-*/
-LLVMBasicBlockRef constant_folding(LLVMBasicBlockRef bb) {
+void constant_folding(LLVMBasicBlockRef bb) {
+    bool change = false;
     LLVMValueRef instruction;
     for (instruction = LLVMGetFirstInstruction(bb); instruction != NULL; instruction = LLVMGetNextInstruction(instruction)) {
         // check if the instruction is an arithmetic operation
@@ -123,8 +102,29 @@ LLVMBasicBlockRef constant_folding(LLVMBasicBlockRef bb) {
                 }
                 // replace all uses of the instruction with the result
                 LLVMReplaceAllUsesWith(instruction, result);
+                change = true;
             }
         }
     }
-    return bb;
+
+    // check for global flag
+    if(!change){
+        constant_folding_change = false;
+    }
+}
+
+bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValueRef value2){
+    // get the address of the load operation
+    LLVMValueRef address = LLVMGetOperand(value1, 0);
+
+    LLVMValueRef next_instruction;
+    for(next_instruction = LLVMGetNextInstruction(value1); next_instruction != value2; next_instruction = LLVMGetNextInstruction(next_instruction)) {
+        if(LLVMGetInstructionOpcode(next_instruction) == LLVMStore) {
+            if(LLVMGetOperand(next_instruction, 1) == address) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
