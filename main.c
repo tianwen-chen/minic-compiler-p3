@@ -7,25 +7,20 @@
 #include "local_optimizer.h"
 #include "llvm_parser.h"
 
-int main(int argc, char **argv){
+int main(int argc, char *argv[]){
     // get the parameter (ll file) and create a llvm module out of it
-    if(argc != 2) {
+    if(argc != 3) {
         printf("You forgot something \n");
         return 1;
     }
-    char *ll_file = argv[1];
-    LLVMModuleRef module = createLLVMModel(ll_file);
+    char *input = argv[1];
+	char *output = argv[2];
+	LLVMModuleRef module = createLLVMModel(input);
 	
     // global optimizations
     global_optimizer(module);
 
-    // print the optimized module
-	char *out_file = (char *)malloc(strlen(ll_file) - 2);
-	strncpy(out_file, ll_file, strlen(ll_file) - 3);
-	strcat(out_file, "out.ll");
+    LLVMPrintModuleToFile(module, output, NULL);
 
-    LLVMPrintModuleToFile(module, "global_optimized.ll", NULL);
-
-	free(out_file);
     return 0;
 }
