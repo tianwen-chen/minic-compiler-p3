@@ -1,11 +1,5 @@
 #include"DArray.h"
 
-typedef struct {
-    int capacity;
-    int size;
-    LLVMValueRef* data;
-} D_Array;
-
 D_Array* create_D_Array() {
     D_Array* arr = (D_Array*) malloc(sizeof(D_Array));
     arr->capacity = 10;

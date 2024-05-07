@@ -1,4 +1,5 @@
 #include "local_optimizer.h"
+#include <cstddef>
 
 // helper func
 bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValueRef value2);
