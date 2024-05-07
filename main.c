@@ -31,17 +31,20 @@ LLVMModuleRef createLLVMModel(char * filename){
 }
 
 
-int main(int argc, char **argv){
+int main(int argc, char *argv[]){
     // get the parameter (ll file) and create a llvm module out of it
-    if(argc != 2) {
-        printf("Usage: %s <ll file>\n", argv[0]);
+    if(argc != 3) {
+        printf("You forgot something \n");
         return 1;
     }
-    char *ll_file = argv[1];
-    LLVMModuleRef module = createLLVMModel(ll_file);
+    char *input = argv[1];
+	char *output = argv[2];
+	LLVMModuleRef module = createLLVMModel(input);
+	
     // global optimizations
     global_optimizer(module);
-    // print the optimized module
-    LLVMPrintModuleToFile(module, "global_optimized.ll", NULL);
+
+    LLVMPrintModuleToFile(module, output, NULL);
+
     return 0;
 }
