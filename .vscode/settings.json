@@ -20,6 +20,10 @@
         "set": "c",
         "stack": "c",
         "unordered_set": "c",
-        "iosfwd": "c"
+        "iosfwd": "c",
+        "__locale": "c",
+        "ios": "c",
+        "forward_list": "c",
+        "__bit_reference": "c"
     }
 }
