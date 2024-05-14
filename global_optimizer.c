@@ -90,6 +90,7 @@ void optimizer(LLVMModuleRef m){
     for(auto it = gen_dict.begin(); it != gen_dict.end(); it++){
         delete it->second;
     }
+
     for(auto it = kill_dict.begin(); it != kill_dict.end(); it++){
         delete it->second;
     }
@@ -180,6 +181,8 @@ void compute_GEN_and_KILL(LLVMBasicBlockRef block, vector<LLVMValueRef>* all_sto
             new_gen->push_back(i);
         }
     }
+    // free the old gen_dict
+    delete gen_dict[block];
     gen_dict[block] = new_gen;
 
     // copmpute KILL
@@ -201,6 +204,8 @@ void compute_GEN_and_KILL(LLVMBasicBlockRef block, vector<LLVMValueRef>* all_sto
             }
         }
     }
+    // free the old kill_dict
+    delete kill_dict[block];
     kill_dict[block] = new_kill;
     // print gen and kill
     
@@ -220,8 +225,7 @@ void compute_IN_and_OUT(LLVMModuleRef m){
     }
     // initialize OUT for each block to be GEN
     for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-        vector<LLVMValueRef>* out = new vector<LLVMValueRef>();
-        copy_vector(out, gen_dict[block]);
+        out_dict[block] = gen_dict[block];
     }
 
     while(change){
@@ -236,7 +240,10 @@ void compute_IN_and_OUT(LLVMModuleRef m){
             }
             // compute OUT
             vector<LLVMValueRef>* new_out = new vector<LLVMValueRef>();
-            new_out = union_vector(gen_dict[block], (minus(in, kill_dict[block])));
+            vector<LLVMValueRef>* minus_res = minus(in, kill_dict[block]);
+            new_out = union_vector(gen_dict[block], minus_res);
+            // free minus_res
+            delete minus_res;
 
             // check if out_dict[block] == new_out
             if (out_dict[block]->size() != new_out->size()){
@@ -251,14 +258,16 @@ void compute_IN_and_OUT(LLVMModuleRef m){
             }
 
             // update in and out
+            // delete in_dict[block];
+            // delete out_dict[block];
             in_dict[block] = in;
             out_dict[block] = new_out;
         }
     }
     // go over every block and print the IN and OUT
     // llvmdumpvalue
-    /*
-    printf("----------------\n");
+   
+    /*printf("----------------\n");
     for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
         printf("Block:\n");
         printf("IN: ");
@@ -417,6 +426,8 @@ bool remove_extra_load(LLVMBasicBlockRef block){
             for(int i = 0; i < to_del->size(); i++){
                 r_set->erase(std::remove(r_set->begin(), r_set->end(), to_del->at(i)), r_set->end());
             }
+            // free to_del
+            delete to_del;
         }
         // if inst is a load
         if(LLVMIsALoadInst(inst)){
@@ -460,8 +471,13 @@ bool remove_extra_load(LLVMBasicBlockRef block){
         LLVMInstructionEraseFromParent(marked_load->at(i));
     }
 
+    int size = marked_load->size();
+    // free all the vectors
+    delete r_set;
+    delete marked_load;
+
     // check for flag
-    if(marked_load->size() == 0){
+    if(size == 0){
         return false;
     } else {
         return true;
@@ -550,9 +566,10 @@ bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValu
 bool dead_code_elimination(LLVMBasicBlockRef bb) {
     bool change = false;
     LLVMValueRef instruction;
+    // FIXME - invalid read of size 8?
     for (instruction = LLVMGetFirstInstruction(bb); instruction != NULL; instruction = LLVMGetNextInstruction(instruction)) {
         // check if the instruction is in the list of instructions to keep
-        if(LLVMIsAAllocaInst(instruction) || LLVMIsAReturnInst(instruction) || LLVMIsACallInst(instruction) || LLVMIsAStoreInst(instruction)) {
+        if(LLVMIsAAllocaInst(instruction) || LLVMIsATerminatorInst(instruction) || LLVMIsACallInst(instruction) || LLVMIsAStoreInst(instruction)) {
             continue;
         }
 
