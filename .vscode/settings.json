@@ -7,6 +7,19 @@
         "map": "c",
         "string": "c",
         "unordered_map": "c",
-        "vector": "c"
+        "vector": "c",
+        "hash_map": "c",
+        "bitset": "c",
+        "initializer_list": "c",
+        "utility": "c",
+        "__hash_table": "c",
+        "__split_buffer": "c",
+        "__tree": "c",
+        "list": "c",
+        "queue": "c",
+        "set": "c",
+        "stack": "c",
+        "unordered_set": "c",
+        "iosfwd": "c"
     }
 }

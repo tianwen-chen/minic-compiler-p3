@@ -4,128 +4,65 @@
 #include <unordered_map>
 #include <cstdlib>
 #include <vector>
+#include <algorithm>
 
 using std::vector;
 using std::unordered_map;
 
-/* customized array */
-typedef struct {
-    int capacity;
-    int size;
-    LLVMValueRef* data;
-} D_Array;
 
-D_Array* create_D_Array() {
-    D_Array* arr = (D_Array*) malloc(sizeof(D_Array));
-    arr->capacity = 10;
-    arr->size = 0;
-    arr->data = (LLVMValueRef*) malloc(arr->capacity * sizeof(LLVMValueRef));
-    return arr;
-}
-
-void push_back(D_Array* arr, LLVMValueRef value) {
-    if (arr->size == arr->capacity) {
-        arr->capacity *= 2;
-        arr->data = (LLVMValueRef*) realloc(arr->data, arr->capacity * sizeof(LLVMValueRef));
-    }
-    arr->data[arr->size++] = value;
-}
-
-void delete_element(D_Array* arr, int index) {
-    for (int i = index; i < arr->size - 1; i++) {
-        arr->data[i] = arr->data[i + 1];
-    }
-    arr->size--;
-}
-
-void copy_D_Array(D_Array* dest, D_Array* src) {
-    dest->capacity = src->capacity;
-    dest->size = src->size;
-    dest->data = (LLVMValueRef*) malloc(dest->capacity * sizeof(LLVMValueRef));
-    for (int i = 0; i < src->size; i++) {
-        dest->data[i] = src->data[i];
-    }
-}
-
-// todo: free memory? 
-/* a union b */
-D_Array* union_D_Arrays(D_Array* a, D_Array* b){
-    D_Array* res = create_D_Array();
-    for(int i = 0; i < a->size; i++){
-        push_back(res, a->data[i]);
-    }
-    for(int i = 0; i < b->size; i++){
-        bool add = true;
-        for(int j = 0; j < a->size; j++){
-            if (a->data[j] == b->data[i]){
-                add = false;
-                break;
-            }
-        }
-        if (add){
-            push_back(res, b->data[i]);
-        }
-    }
-    return res;
-}
-
-/* a - b */
-D_Array* minus(D_Array* a, D_Array* b){
-    D_Array* res = create_D_Array();
-    for(int i = 0; i < a->size; i++){
-        bool add = true;
-        for(int j = 0; j < b->size; j++){
-            if (a->data[i] == b->data[j]){
-                add = false;
-                break;
-            }
-        }
-        if (add){
-            push_back(res, a->data[i]);
-        }
-    }
-    return res;
-}
-
-void free_D_Array(D_Array* arr) {
-    free(arr->data);
-    free(arr);
-}
+/* TODO LIST
+    1. change all D_array to vector
+    2. GDB/print into in_dict to see if empty is valid (check the result in last loop)
+    3. valgrind
+*/
 
 /* global vars */
-unordered_map<LLVMBasicBlockRef, D_Array*> gen_dict;
-unordered_map<LLVMBasicBlockRef, D_Array*> kill_dict;
-unordered_map<LLVMBasicBlockRef, D_Array*> in_dict;
-unordered_map<LLVMBasicBlockRef, D_Array*> out_dict;
+unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*> gen_dict;
+unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*> kill_dict;
+unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*> in_dict;
+unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*> out_dict;
 unordered_map<LLVMBasicBlockRef, vector<LLVMBasicBlockRef>*> pred_dict;     // predecessors
 unordered_map<LLVMBasicBlockRef, int> bb_indices;           // index basic blocks for debug purpose
 
-/* global flags*/
-bool in_out_change = true;
-bool remove_load_change = true;
-bool common_subexpression_elimination_change = true;
-bool dead_code_elimination_change = true;
-bool constant_folding_change = true;
-
-
-/* func declarations */
-D_Array* find_store_inst(LLVMBasicBlockRef block, LLVMValueRef addr);
-void construct_predecessor_dict(LLVMModuleRef m);
+/* global optimization final function */
+void optimizer(LLVMModuleRef m);
 /* local optimizations */
-void common_subexpression_elimination(LLVMBasicBlockRef bb);
+bool common_subexpression_elimination(LLVMBasicBlockRef bb);
 bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValueRef value2);
-void dead_code_elimination(LLVMBasicBlockRef bb);
-void constant_folding(LLVMBasicBlockRef bb);
+bool dead_code_elimination(LLVMBasicBlockRef bb);
+bool constant_folding(LLVMBasicBlockRef bb);
 /* global optimization routines */
-void compute_GEN_and_KILL(LLVMBasicBlockRef block, D_Array* gen, D_Array* kill);
+void compute_GEN_and_KILL(LLVMBasicBlockRef block, vector<LLVMValueRef>* all_store);
 void compute_IN_and_OUT(LLVMModuleRef m);
-void remove_extra_load(LLVMBasicBlockRef block);
+bool remove_extra_load(LLVMBasicBlockRef block);
+bool global_optimization(LLVMModuleRef m);
 /* helper functions */
 void print_pred_and_succ_dict(unordered_map<LLVMBasicBlockRef, vector<LLVMBasicBlockRef>*> dict);
 void construct_bb_indices(LLVMModuleRef m);
+vector<LLVMValueRef>* find_store_inst(vector<LLVMValueRef>*, LLVMValueRef addr);
+void construct_predecessor_dict(LLVMModuleRef m);
+vector<LLVMValueRef>* union_vector(vector<LLVMValueRef>* a, vector<LLVMValueRef>* b);
+vector<LLVMValueRef>* minus(vector<LLVMValueRef>* a, vector<LLVMValueRef>* b);
+void copy_vector(vector<LLVMValueRef>* dest, vector<LLVMValueRef>* src);
+bool are_equal_ignore_order(std::vector<LLVMValueRef>* vec1, std::vector<LLVMValueRef>* vec2);
 
 /* global optimzation function -- only need to call this */
-void global_optimizer(LLVMModuleRef m){
+void optimizer(LLVMModuleRef m){
+    // initialize global vars
+    gen_dict = unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*>();
+    kill_dict = unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*>();
+    in_dict = unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*>();
+    out_dict = unordered_map<LLVMBasicBlockRef, vector<LLVMValueRef>*>();
+    pred_dict = unordered_map<LLVMBasicBlockRef, vector<LLVMBasicBlockRef>*>();
+    bb_indices = unordered_map<LLVMBasicBlockRef, int>();
+    
+    for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(LLVMGetFirstFunction(m)); block != NULL; block = LLVMGetNextBasicBlock(block)){
+        gen_dict[block] = new vector<LLVMValueRef>();
+        kill_dict[block] = new vector<LLVMValueRef>();
+        in_dict[block] = new vector<LLVMValueRef>();
+        out_dict[block] = new vector<LLVMValueRef>();
+        pred_dict[block] = new vector<LLVMBasicBlockRef>();
+    }
     // construct predecessors dict
     construct_predecessor_dict(m);
     // fix point
@@ -133,129 +70,214 @@ void global_optimizer(LLVMModuleRef m){
     while(change){
         // local optimizations
         LLVMValueRef first_func = LLVMGetFirstFunction(m);
+        bool common_subexpression_elimination_change = false;
+        bool dead_code_elimination_change = false;
+        bool constant_folding_change = false;
+
         for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-            common_subexpression_elimination(block);
-            dead_code_elimination(block);
-            constant_folding(block);
+            common_subexpression_elimination_change = common_subexpression_elimination(block);
+            dead_code_elimination_change = dead_code_elimination(block);
+            constant_folding_change = constant_folding(block);
         }
-        printf("after local optimizations\n");
-        // compute GEN and KILL
-        for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-            D_Array* gen = create_D_Array();
-            D_Array* kill = create_D_Array();
-            compute_GEN_and_KILL(block, gen, kill);
-            gen_dict[block] = gen;
-            kill_dict[block] = kill;
-        }
-        // compute IN and OUT
-        compute_IN_and_OUT(m);
-        // constant propagation
-        for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-            remove_extra_load(block);
-        }
+        bool remove_load_change = global_optimization(m);
         // check for fix point: all global flags false
-        if(!in_out_change && !remove_load_change && !common_subexpression_elimination_change && !dead_code_elimination_change && !constant_folding_change){
+        if(!remove_load_change && !common_subexpression_elimination_change && !dead_code_elimination_change && !constant_folding_change){
             change = false;
         }
     }
+    printf("Optimization done\n");
+    // free all global vars
+    for(auto it = gen_dict.begin(); it != gen_dict.end(); it++){
+        delete it->second;
+    }
+    for(auto it = kill_dict.begin(); it != kill_dict.end(); it++){
+        delete it->second;
+    }
+    for(auto it = in_dict.begin(); it != in_dict.end(); it++){
+        delete it->second;
+    }
+    for(auto it = out_dict.begin(); it != out_dict.end(); it++){
+        delete it->second;
+    }
+    for(auto it = pred_dict.begin(); it != pred_dict.end(); it++){
+        delete it->second;
+    }
+    // free bb_indices
+    bb_indices.clear();
+    return;
+}
+
+bool global_optimization(LLVMModuleRef m){
+    bool res = false;
+    LLVMValueRef first_func = LLVMGetFirstFunction(m);
+    // compute all_store
+    vector<LLVMValueRef>* all_store = new vector<LLVMValueRef>();
+    for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
+        for(LLVMValueRef inst = LLVMGetFirstInstruction(block); inst != NULL; inst = LLVMGetNextInstruction(inst)){
+            if(LLVMIsAStoreInst(inst)){
+                all_store->push_back(inst);
+            }
+        }
+    }
+    // compute GEN and KILL
+    for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){   
+        compute_GEN_and_KILL(block, all_store);
+        /*
+        printf("gen: ");
+        printf("\n");
+        for(int i = 0; i < gen_dict[block]->size(); i++){
+            LLVMDumpValue(gen_dict[block]->at(i));
+            printf("\n");
+        }
+        printf("\n");
+        printf("kill: ");
+        printf("\n");
+        for(int i = 0; i < kill_dict[block]->size(); i++){
+            LLVMDumpValue(kill_dict[block]->at(i));
+            printf("\n");
+        }
+        printf("\n");
+        */
+    }
+    compute_IN_and_OUT(m);
+    // constant propagation
+    for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
+        if(remove_extra_load(block)){
+            res = true;
+        }
+    }
+
+    return res;
 }
 
 /* global dict construction routines */
 
-void compute_GEN_and_KILL(LLVMBasicBlockRef block, D_Array* gen, D_Array* kill) {
-    D_Array* all_store = create_D_Array();
+void compute_GEN_and_KILL(LLVMBasicBlockRef block, vector<LLVMValueRef>* all_store) {    
+    // GEN: initialize gen to be empty
+    vector<LLVMValueRef>* new_gen = new vector<LLVMValueRef>();
+    // KILL: compute the set of all store instructions in the block
     LLVMValueRef i;
-    // compute GEN
+    // compute GEN & construct all_store
     for(i = LLVMGetFirstInstruction(block); i != NULL; i = LLVMGetNextInstruction(i)){
-        if(LLVMGetInstructionOpcode(i) == LLVMStore){
-            // add to store set
-            push_back(all_store, i);
-            // check if any other inst in gen is killed by i
+        if(LLVMIsAStoreInst(i)){            
+            // GEN: check if any other inst in new_gen is killed by i
             bool add = true;
-            for(int j = 0; j <gen->size; j++){
-                LLVMValueRef curr_inst = gen->data[j];
-                // check if curr_inst is store and check the memory location
-                if (LLVMGetInstructionOpcode(curr_inst) == LLVMStore && LLVMGetOperand(curr_inst, 1) == LLVMGetOperand(i, 1)){
+            LLVMValueRef curr_inst;
+            for(int j = 0; j < new_gen->size(); j++){
+                curr_inst = new_gen->at(j);
+                // check if curr_inst is store to the same memory location as i
+                if (LLVMGetOperand(curr_inst, 1) == LLVMGetOperand(i, 1)){
                     add = false;
                     break;
                 }
+                
             }
-            if (add){
-                push_back(gen, i);
+            // GEN: add i to new_gen if not killed by any other inst in new_gen
+            if (!add){
+                // delete curr_inst from new_gen
+                new_gen->erase(std::remove(new_gen->begin(), new_gen->end(), curr_inst), new_gen->end());
             }
+            new_gen->push_back(i);
         }
     }
+    gen_dict[block] = new_gen;
 
     // copmpute KILL
-    for(int i = 0; i < all_store->size; i++){
-        LLVMValueRef store_inst = all_store->data[i];
-        for(int j = 0; j < kill->size; j++){
-            LLVMValueRef curr_inst = kill->data[j];
-            // skip itself
-            if(curr_inst == store_inst){
-                continue;
-            }
-            if (LLVMGetOperand(curr_inst, 1) == LLVMGetOperand(store_inst, 1)){
-                push_back(kill, curr_inst);
+    // initialize kill to be empty
+    vector<LLVMValueRef>* new_kill = new vector<LLVMValueRef>();
+    for(i = LLVMGetFirstInstruction(block); i != NULL; i = LLVMGetNextInstruction(i)){
+        if(LLVMIsAStoreInst(i)){
+            // add all the instructions in all_store that get killed by i to kill
+            for(int j = 0; j < all_store->size(); j++){
+                LLVMValueRef curr_inst = all_store->at(j);
+                // skip itself
+                if(curr_inst == i){
+                    continue;
+                }
+                // REVIEW - check if the way of getting memory location is right
+                if (LLVMGetOperand(curr_inst, 1) == LLVMGetOperand(i, 1)){
+                    new_kill->push_back(curr_inst);
+                }
             }
         }
     }
+    kill_dict[block] = new_kill;
+    // print gen and kill
+    
     
 }
 
 void compute_IN_and_OUT(LLVMModuleRef m){
+
     bool change = true;
     int loop_count = 0;
     LLVMValueRef first_func = LLVMGetFirstFunction(m);
     /* initialize IN and OUT */
+
+    // initialize IN for each block to be empty
     for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-        // in_dict[block] = create_D_Array();
-        // for OUT, copy from gen[block]
-        out_dict[block] = create_D_Array();
-        for(int i = 0; i < gen_dict[block]->size; i++){
-            push_back(out_dict[block], gen_dict[block]->data[i]);
-        }
+        in_dict[block] = new vector<LLVMValueRef>();
     }
+    // initialize OUT for each block to be GEN
+    for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
+        vector<LLVMValueRef>* out = new vector<LLVMValueRef>();
+        copy_vector(out, gen_dict[block]);
+    }
+
     while(change){
         loop_count++;
         for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-            D_Array* new_in = create_D_Array();
+            vector<LLVMValueRef>* in = new vector<LLVMValueRef>();
             // compute IN
             // IN[block] = union(OUT[P1], OUT[P2],.., OUT[PN]), where P1, P2, .. PN are predecessors of block
             for(int i = 0; i < pred_dict[block]->size(); i++){
                 LLVMBasicBlockRef curr_pred = pred_dict[block]->at(i);
-                new_in = union_D_Arrays(new_in, out_dict[curr_pred]);
+                in = union_vector(in, out_dict[curr_pred]);
             }
             // compute OUT
-            D_Array* new_out = create_D_Array();
-            new_out = union_D_Arrays(out_dict[block], (minus(new_in, kill_dict[block])));
+            vector<LLVMValueRef>* new_out = new vector<LLVMValueRef>();
+            new_out = union_vector(gen_dict[block], (minus(in, kill_dict[block])));
 
             // check if out_dict[block] == new_out
-            if (out_dict[block]->size != new_out->size){
+            if (out_dict[block]->size() != new_out->size()){
                 change = true;
             } else {
-                // compare the two array having same elements using minus
-                D_Array* diff = minus(out_dict[block], new_out);
-                if (diff->size != 0){
+                // compare if new_out and out_dict[block] have the same elements
+                if (!are_equal_ignore_order(new_out, out_dict[block])){
                     change = true;
-                } else{
+                } else {
                     change = false;
-                    break;
-                }
+                } 
             }
 
             // update in and out
+            in_dict[block] = in;
             out_dict[block] = new_out;
-            in_dict[block] = new_in;
         }
     }
-    // check for flag
-    if (loop_count == 1){
-        in_out_change = false;
-        printf("no change for in and out\n");
-    } else{
-        printf("change for in and out\n");
+    // go over every block and print the IN and OUT
+    // llvmdumpvalue
+    /*
+    printf("----------------\n");
+    for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
+        printf("Block:\n");
+        printf("IN: ");
+        printf("\n");
+        for(int i = 0; i < in_dict[block]->size(); i++){
+            LLVMDumpValue(in_dict[block]->at(i));
+            printf("\n");
+        }
+        printf("\n");
+        printf("OUT: ");
+        printf("\n");
+        for(int i = 0; i < out_dict[block]->size(); i++){
+            LLVMDumpValue(out_dict[block]->at(i));
+            printf("\n");
+        }
+        printf("\n");
     }
+    printf("----------------\n");
+    */
 }
 
 void construct_predecessor_dict(LLVMModuleRef m){
@@ -301,6 +323,48 @@ void construct_bb_indices(LLVMModuleRef m){
 
 
 /* helper func */
+vector<LLVMValueRef>* union_vector(vector<LLVMValueRef>* a, vector<LLVMValueRef>* b){
+    vector<LLVMValueRef>* res = new vector<LLVMValueRef>();
+    for(int i = 0; i < a->size(); i++){
+        res->push_back(a->at(i));
+    }
+    for(int i = 0; i < b->size(); i++){
+        bool add = true;
+        for(int j = 0; j < a->size(); j++){
+            if(a->at(j) == b->at(i)){
+                add = false;
+                break;
+            }
+        }
+        if(add){
+            res->push_back(b->at(i));
+        }
+    }
+    return res;
+}
+
+vector<LLVMValueRef>* minus(vector<LLVMValueRef>* a, vector<LLVMValueRef>* b){
+    vector<LLVMValueRef>* res = new vector<LLVMValueRef>();
+    for(int i = 0; i < a->size(); i++){
+        bool add = true;
+        for(int j = 0; j < b->size(); j++){
+            if(a->at(i) == b->at(j)){
+                add = false;
+                break;
+            }
+        }
+        if(add){
+            res->push_back(a->at(i));
+        }
+    }
+    return res;
+}
+
+void copy_vector(vector<LLVMValueRef>* dest, vector<LLVMValueRef>* src){
+    for(int i = 0; i < src->size(); i++){
+        dest->push_back(src->at(i));
+    }
+}
 
 void print_pred_and_succ_dict(unordered_map<LLVMBasicBlockRef, vector<LLVMBasicBlockRef>*> dict){
     for(auto it = dict.begin(); it != dict.end(); it++){
@@ -313,70 +377,105 @@ void print_pred_and_succ_dict(unordered_map<LLVMBasicBlockRef, vector<LLVMBasicB
     }
 }
 
+bool are_equal_ignore_order(std::vector<LLVMValueRef>* vec1, std::vector<LLVMValueRef>* vec2) {
+    if (vec1->size() != vec2->size()) {
+        return false;
+    }
+
+    // Make copies of the vectors because sorting is in-place
+    std::vector<LLVMValueRef> copy1 = *vec1;
+    std::vector<LLVMValueRef> copy2 = *vec2;
+
+    // Sort both vectors
+    std::sort(copy1.begin(), copy1.end());
+    std::sort(copy2.begin(), copy2.end());
+
+    // Compare the vectors
+    return std::equal(copy1.begin(), copy1.end(), copy2.begin());
+}
+
 /* remove_extra_load function */
-void remove_extra_load(LLVMBasicBlockRef block){
-    D_Array* marked_inst = create_D_Array();
-    D_Array* i_list = create_D_Array();
-    copy_D_Array(i_list, gen_dict[block]);
+bool remove_extra_load(LLVMBasicBlockRef block){
+    // R = IN[B]
+    vector<LLVMValueRef>* r_set = new vector<LLVMValueRef>();
+    copy_vector(r_set, in_dict[block]);
+
+    vector<LLVMValueRef>* marked_load = new vector<LLVMValueRef>();
+    
     for(LLVMValueRef inst = LLVMGetFirstInstruction(block); inst != NULL; inst = LLVMGetNextInstruction(inst)){
-        // if is store, add to i_list, remove all stores in i_list that are killed by inst
-        // REVIEW -  double add load inst?
-        if(LLVMGetInstructionOpcode(inst) == LLVMStore){
-            push_back(i_list, inst);
-            for(int i = 0; i < i_list->size; i++){
-                LLVMValueRef curr_inst = i_list->data[i];
-                if(LLVMGetInstructionOpcode(curr_inst) == LLVMStore && LLVMGetOperand(curr_inst, 1) == LLVMGetOperand(inst, 1)){
-                    delete_element(i_list, i);
+        // if inst is store, add to r_set, remove all stores in r_set that are killed by inst
+        if(LLVMIsAStoreInst(inst)){
+            vector<LLVMValueRef>* to_del = new vector<LLVMValueRef>();
+            for(int i = 0; i < r_set->size(); i++){
+                LLVMValueRef curr_inst = r_set->at(i);
+                if(LLVMIsAStoreInst(curr_inst) && LLVMGetOperand(curr_inst, 1) == LLVMGetOperand(inst, 1)){
+                    to_del->push_back(curr_inst);
+        
                 }
             }
+            r_set->push_back(inst);
+            for(int i = 0; i < to_del->size(); i++){
+                r_set->erase(std::remove(r_set->begin(), r_set->end(), to_del->at(i)), r_set->end());
+            }
         }
-        if(LLVMGetInstructionOpcode(inst) == LLVMLoad){
-            // get the address of the load inst
+        // if inst is a load
+        if(LLVMIsALoadInst(inst)){
+            // get the address of the load inst -> %t
             LLVMValueRef addr = LLVMGetOperand(inst, 0);
-            // find all strores in i_list that writes to addr
-            D_Array* store_inst = find_store_inst(block, addr);
+            // find all stores in r_set that writes to addr %t
+            vector<LLVMValueRef>* store_inst = find_store_inst(r_set, addr);
             // if there is no store inst that writes to addr, skip
-            if(store_inst->size == 0){
+            if(store_inst->size() == 0){
                 continue;
             }
             // check if all these store instructions are constant store and store the same constant
+            bool all_const = true;
+            for(int i = 0; i < store_inst->size(); i++){
+                if(!LLVMIsAConstant(LLVMGetOperand(store_inst->at(i), 0))){
+                    all_const = false;
+                    break;
+                }
+            }
             bool same = true;
-            LLVMValueRef constant = LLVMGetOperand(store_inst->data[0], 0);
-            if(LLVMIsAConstant(constant)){
-                for(int i = 0; i < store_inst->size; i++){
-                    LLVMValueRef store = store_inst->data[i];
-                    if(LLVMGetOperand(store, 0) != constant){
+            // REVIEW - right way to get constant ?
+            LLVMValueRef constant = LLVMGetOperand(store_inst->at(0), 0);
+            if(all_const){
+                for(int i = 0; i < store_inst->size(); i++){
+                    LLVMValueRef store = store_inst->at(i);
+                    // REVIEW - is this the right way to compare constant ?
+                    if(LLVMConstIntGetSExtValue(LLVMGetOperand(store, 0)) != LLVMConstIntGetSExtValue(constant)){
                         same = false;
                         break;
                     }
                 }
             }
-            // FIXME - use LLVMConstInt & LLVMConstIntGetSExtValue? replace all uses if inst by the constant
-            if(same){
+            if(all_const && same){
                 LLVMReplaceAllUsesWith(inst, constant);
-                push_back(marked_inst, inst);
+                marked_load->push_back(inst);
             }
         }
     }
     // delete all the marked load instruction
-    for(int i = 0; i < marked_inst->size; i++){
-        LLVMValueRef inst = marked_inst->data[i];
-        LLVMInstructionEraseFromParent(inst);
+    for(int i = 0; i < marked_load->size(); i++){
+        LLVMInstructionEraseFromParent(marked_load->at(i));
     }
 
     // check for flag
-    if(marked_inst->size == 0){
-        remove_load_change = false;
+    if(marked_load->size() == 0){
+        return false;
+    } else {
+        return true;
     }
 }
 
-/* helper func: find all store inst that write to a specific address*/
-// REVIEW - check the type of the address
-D_Array* find_store_inst(LLVMBasicBlockRef block, LLVMValueRef addr){
-    D_Array* res = create_D_Array();
-    for(LLVMValueRef inst = LLVMGetFirstInstruction(block); inst != NULL; inst = LLVMGetNextInstruction(inst)){
+/* helper func: find all store inst in set s that write to a specific address addr */
+// REVIEW - check address
+vector<LLVMValueRef>* find_store_inst(vector<LLVMValueRef>* s, LLVMValueRef addr){
+    vector<LLVMValueRef>* res = new vector<LLVMValueRef>();
+    for(int i = 0; i < s->size(); i++){
+        LLVMValueRef inst = s->at(i);
         if(LLVMGetInstructionOpcode(inst) == LLVMStore && LLVMGetOperand(inst, 1) == addr){
-            push_back(res, inst);
+            res->push_back(inst);
         }
     }
     return res;
@@ -386,11 +485,14 @@ D_Array* find_store_inst(LLVMBasicBlockRef block, LLVMValueRef addr){
 
 
 /* local optimizations */
-void common_subexpression_elimination(LLVMBasicBlockRef bb) {
+bool common_subexpression_elimination(LLVMBasicBlockRef bb) {
     // loop over each pair of instructions in the basic block
     LLVMValueRef instruction_1;
     bool flag = false;
     for (instruction_1 = LLVMGetFirstInstruction(bb); instruction_1 != NULL; instruction_1 = LLVMGetNextInstruction(instruction_1)) {
+        if(LLVMIsAStoreInst(instruction_1) || LLVMIsACallInst(instruction_1) || LLVMIsAReturnInst(instruction_1) || LLVMIsAAllocaInst(instruction_1)) {
+            continue;
+        }
         LLVMValueRef instruction_2;
         for(instruction_2 = LLVMGetNextInstruction(instruction_1); instruction_2 != NULL; instruction_2 = LLVMGetNextInstruction(instruction_2)) {
             // check if the two instructions have the same opcode and the same operands
@@ -423,7 +525,9 @@ void common_subexpression_elimination(LLVMBasicBlockRef bb) {
     }
     // check for global flag
     if(!flag){
-        common_subexpression_elimination_change = false;
+        return false;
+    }else{
+        return true;
     }
 }
 
@@ -443,38 +547,31 @@ bool common_subexpression_elimination_safety_check(LLVMValueRef value1, LLVMValu
     return true;
 }
 
-void dead_code_elimination(LLVMBasicBlockRef bb) {
+bool dead_code_elimination(LLVMBasicBlockRef bb) {
     bool change = false;
-    // TODO: complete the list in header file (or macro?)
-    LLVMOpcode instructions_to_keep[3] = {LLVMStore, LLVMCall, LLVMRet};
-    // loop over each instruction in the basic block and check if the oprand is used by any other instruction
     LLVMValueRef instruction;
     for (instruction = LLVMGetFirstInstruction(bb); instruction != NULL; instruction = LLVMGetNextInstruction(instruction)) {
         // check if the instruction is in the list of instructions to keep
-        bool keep = false;
-        // TODO: number of loops (size of the list), or use a hashset?
-        for(int i = 0; i < 3; i++) {
-            if(LLVMGetInstructionOpcode(instruction) == instructions_to_keep[i]) {
-                keep = true;
-                break;
-            }
+        if(LLVMIsAAllocaInst(instruction) || LLVMIsAReturnInst(instruction) || LLVMIsACallInst(instruction) || LLVMIsAStoreInst(instruction)) {
+            continue;
         }
-        if(!keep) {
-            // check if the instruction is used by any other instruction
-            if(LLVMGetFirstUse(instruction) == NULL) {
-                // if not, remove the instruction
-                LLVMInstructionEraseFromParent(instruction);
-                change = true;
-            }
+
+        // check if the instruction is used by any other instruction
+        if(LLVMGetFirstUse(instruction) == NULL) {
+            // if not, remove the instruction
+            LLVMInstructionEraseFromParent(instruction);
+            change = true;
         }
     }
     // check for global flag
     if(!change){
-        dead_code_elimination_change = false;
+        return false;
+    } else{
+        return true;
     }
 }
 
-void constant_folding(LLVMBasicBlockRef bb) {
+bool constant_folding(LLVMBasicBlockRef bb) {
     bool change = false;
     LLVMValueRef instruction;
     for (instruction = LLVMGetFirstInstruction(bb); instruction != NULL; instruction = LLVMGetNextInstruction(instruction)) {
@@ -507,6 +604,8 @@ void constant_folding(LLVMBasicBlockRef bb) {
 
     // check for global flag
     if(!change){
-        constant_folding_change = false;
+        return false;
+    }else{
+        return true;
     }
 }

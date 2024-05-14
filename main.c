@@ -42,7 +42,27 @@ int main(int argc, char *argv[]){
 	LLVMModuleRef module = createLLVMModel(input);
 	
     // global optimizations
-    global_optimizer(module);
+    optimizer(module);
+
+	// local optimizations
+	// bool change = true;
+    // while(change){
+    //     // local optimizations
+    //     LLVMValueRef first_func = LLVMGetFirstFunction(module);
+    //     bool common_subexpression_elimination_change = false;
+    //     bool dead_code_elimination_change = false;
+    //     bool constant_folding_change = false;
+
+    //     for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
+    //         common_subexpression_elimination_change = common_subexpression_elimination(block);
+    //         dead_code_elimination_change = dead_code_elimination(block);
+    //         constant_folding_change = constant_folding(block);
+    //     }
+    //     // check for fix point: all global flags false
+    //     if(!common_subexpression_elimination_change && !dead_code_elimination_change && !constant_folding_change){
+    //         change = false;
+    //     }
+    // }
 
     LLVMPrintModuleToFile(module, output, NULL);
 
