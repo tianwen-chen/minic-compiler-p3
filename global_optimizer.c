@@ -200,8 +200,12 @@ void compute_IN_and_OUT(LLVMModuleRef m){
 
     // initialize OUT for each block to be GEN
     for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
-        out_dict[block] = gen_dict[block];
+        out_dict[block] = new vector<LLVMValueRef>();
+        copy_vector(out_dict[block], gen_dict[block]);
+        in_dict[block] = new vector<LLVMValueRef>();
     }
+
+
 
     while(change){
         loop_count++;
@@ -211,12 +215,33 @@ void compute_IN_and_OUT(LLVMModuleRef m){
             // IN[block] = union(OUT[P1], OUT[P2],.., OUT[PN]), where P1, P2, .. PN are predecessors of block
             for(int i = 0; i < pred_dict[block]->size(); i++){
                 LLVMBasicBlockRef curr_pred = pred_dict[block]->at(i);
-                vector<LLVMValueRef> temp = *in;
-                union_vector(&temp, out_dict[curr_pred], in);
+                // union two vectors: in and a
+                vector<LLVMValueRef>* a = out_dict[curr_pred];
+                    for(int i = 0; i < a->size(); i++){
+                        bool add = true;
+                        for(int j = 0; j < in->size(); j++){
+                            if(in->at(j) == a->at(i)){
+                                add = false;
+                                break;
+                            }
+                        }
+                        if(add){
+                            in->push_back(a->at(i));
+                        }
+                    }
             }
-            // compute OUT
+
+            // free old in and out
+            delete in_dict[block];
+            
+            // update in and out
+            in_dict[block] = in;
+            
+        }
+        // compute out
+        for(LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(first_func); block != NULL; block = LLVMGetNextBasicBlock(block)){
             vector<LLVMValueRef>* new_out = new vector<LLVMValueRef>();
-            vector<LLVMValueRef>* minus_res = minus(in, kill_dict[block]);
+            vector<LLVMValueRef>* minus_res = minus(in_dict[block], kill_dict[block]);
             union_vector(gen_dict[block], minus_res, new_out);
             // free minus_res
             delete minus_res;
@@ -233,8 +258,7 @@ void compute_IN_and_OUT(LLVMModuleRef m){
                 } 
             }
 
-            // update in and out
-            in_dict[block] = in;
+            delete out_dict[block];
             out_dict[block] = new_out;
         }
     }
@@ -306,12 +330,21 @@ void construct_bb_indices(LLVMModuleRef m){
 /* helper func */
 void union_vector(vector<LLVMValueRef>* a, vector<LLVMValueRef>* b, vector<LLVMValueRef>* res){
     for(int i = 0; i < a->size(); i++){
-        res->push_back(a->at(i));
+        bool add = true;
+        for(int j = 0; j < res->size(); j++){
+            if(res->at(j) == a->at(i)){
+                add = false;
+                break;
+            }
+        }
+        if(add){
+            res->push_back(a->at(i));
+        }
     }
     for(int i = 0; i < b->size(); i++){
         bool add = true;
-        for(int j = 0; j < a->size(); j++){
-            if(a->at(j) == b->at(i)){
+        for(int j = 0; j < res->size(); j++){
+            if(res->at(j) == b->at(i)){
                 add = false;
                 break;
             }
